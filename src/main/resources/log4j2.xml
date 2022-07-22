@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xml>
+
+<configuration>
+	<appenders>
+		<Console name="Console" target="SYSTEM_OUT">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c] %m%n" />
+		</Console>
+
+		<RollingRandomAccessFile name="RollingRandomAccessFileInput" fileName="/data/log_files/mobius/biz/integrationgateway/scb/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-io-no_container_id}.txt" filePattern="/data/log_files/mobius/$${date:yyyy-MM}/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-io-no_container_id}.txt-%d{yyyy-MM-dd}-%i.gz">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c][%marker] %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1" modulate="true" />
+			</Policies>
+			<MarkerFilter marker="INBOUND" onMatch="ACCEPT" onMismatch="DENY" />
+		</RollingRandomAccessFile>
+
+		<RollingRandomAccessFile name="RollingRandomAccessFileOutput" fileName="/data/log_files/mobius/biz/integrationgateway/scb/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-io-no_container_id}.txt" filePattern="/data/log_files/mobius/$${date:yyyy-MM}/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-io-no_container_id}.txt-%d{yyyy-MM-dd}-%i.gz">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c][%marker] %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1" modulate="true" />
+			</Policies>
+			<MarkerFilter marker="OUTBOUND" onMatch="ACCEPT" onMismatch="DENY" />
+		</RollingRandomAccessFile>
+		<RollingRandomAccessFile name="RollingRandomAccessFileSend" fileName="/data/log_files/mobius/biz/integrationgateway/scb/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-sr-no_container_id}.txt" filePattern="/data/log_files/mobius/$${date:yyyy-MM}/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-sr-no_container_id}.txt-%d{yyyy-MM-dd}-%i.gz">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c][%marker] %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1" modulate="true" />
+			</Policies>
+			<MarkerFilter marker="SEND" onMatch="ACCEPT" onMismatch="DENY" />
+		</RollingRandomAccessFile>
+
+		<RollingRandomAccessFile name="RollingRandomAccessFileReceive" fileName="/data/log_files/mobius/biz/integrationgateway/scb/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-sr-no_container_id}.txt" filePattern="/data/log_files/mobius/$${date:yyyy-MM}/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-sr-no_container_id}.txt-%d{yyyy-MM-dd}-%i.gz">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c][%marker] %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1" modulate="true" />
+			</Policies>
+			<MarkerFilter marker="RECEIVE" onMatch="ACCEPT" onMismatch="DENY" />
+		</RollingRandomAccessFile>
+
+		<RollingRandomAccessFile name="RollingRandomAccessFile" fileName="/data/log_files/mobius/biz/integrationgateway/scb/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-no_container_id}.txt" filePattern="/data/log_files/mobius/$${date:yyyy-MM}/log-${env:HOSTNAME:-sde-biz-cardx-mobius-gateway-ws-no_container_id}.txt-%d{yyyy-MM-dd}-%i.gz">
+			<PatternLayout pattern="[%t][%p][%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}][tagId:%X{fishTagId}][camelbreadcrumbId:%X{camel.breadcrumbId}][%c] %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1" modulate="true" />
+			</Policies>
+			<NoMarkerFilter onMatch="ACCEPT" onMismatch="DENY"/>
+		</RollingRandomAccessFile>
+
+		<Async name="Async">
+			<appender-ref ref="Console" />
+			<appender-ref ref="RollingRandomAccessFile" />
+			<appender-ref ref="RollingRandomAccessFileSend" />
+			<appender-ref ref="RollingRandomAccessFileReceive" />
+			<appender-ref ref="RollingRandomAccessFileInput" />
+			<appender-ref ref="RollingRandomAccessFileOutput" />
+		</Async>
+	</appenders>
+
+	<loggers>
+
+		<logger name="com.sde" level="debug" />
+
+		<!--
+			Enable debug logging if you want to inspect jms correlationid on the jms producer
+			but be warned turning on debug will cause ibm mq client
+			creating FFDC log files consuming disk space
+		-->
+		<!-- <logger name="org.apache.camel.component.jms" level="debug" /> -->
+
+		<logger name="org.hibernate.engine.jdbc.internal.JdbcCoordinatorImpl"
+				level="error" />
+		<logger
+				name="org.hibernate.engine.internal.StatisticalLoggingSessionEventListener"
+				level="error" />
+		<logger name="org.hibernate" level="info" />
+		<logger name="org.hibernate.SQL" level="debug" />
+		<!-- <logger name="org.hibernate.type" level="trace"/> -->
+		<logger name="org.hibernate.stat.internal.ConcurrentStatisticsImpl"
+				level="debug" />
+		<logger name="org.springframework" level="info" />
+		<logger name="org.springframework.web.servlet.mvc" level="error" />
+		<logger name="org.springframework.web.servlet.handler" level="error" />
+		<logger name="org.springframework.web.context.support" level="warn" />
+		<logger name="org.springframework.security.web.DefaultSecurityFilterChain"
+				level="error" />
+		<logger name="org.apache.cxf" level="info" />
+		<logger name="org.apache.commons.digester" level="info" />
+		<logger name="org.apache.commons.beanutils" level="info" />
+		<logger name="net.sf.jasperreports" level="info" />
+		<logger name="org.quartz" level="info" />
+
+		<root level="info">
+			<appender-ref ref="Async" />
+		</root>
+	</loggers>
+</configuration>
