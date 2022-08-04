@@ -6,6 +6,7 @@ import com.ptn.internal.model.dto.Status;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public class BaseWS {
     public <T> ResponseEntity<GeneralResponse<T>> success(T data) {
@@ -31,14 +32,14 @@ public class BaseWS {
         return ResponseEntity.ok(build);
     }
 
-    public <T> ResponseEntity<GeneralResponse<T>> failed() {
+    public <T> ResponseEntity<GeneralResponse<T>> failed(Optional<String> message) {
         Status status = Status.builder()
                 .code(Constants.STATUS_CODE.FAILED)
-                .message(Constants.STATUS_MESSAGE.FAILED)
+                .message(message.isPresent() ?  message.get() : Constants.STATUS_MESSAGE.FAILED)
                 .timestamp(LocalDateTime.now())
                 .build();
         GeneralResponse<T> build = new GeneralResponse<>();
         build.setStatus(status);
-        return ResponseEntity.ok(build);
+        return ResponseEntity.internalServerError().body(build);
     }
 }
