@@ -15,6 +15,6 @@ public interface ImageRepository extends JpaRepository<TblImageInfo, BigInteger>
 
     @Modifying
     @Transactional
-    @Query(value = "update Tbl_Image_Info  set status = ?2 where id = ?1", nativeQuery = true)
+    @Query(value = "update Tbl_Image_Info  set status = ?2, modified_date = now() where id = ?1", nativeQuery = true)
     int updateStatusImage(BigInteger id, int status);
 }

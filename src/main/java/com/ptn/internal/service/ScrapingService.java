@@ -9,17 +9,28 @@ import com.ptn.internal.model.dto.Status;
 import com.ptn.internal.repository.BackupRepository;
 import com.ptn.internal.repository.ImageRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.util.concurrent.ListenableFutureCallback;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -31,6 +42,9 @@ public class ScrapingService {
     private static final Pattern pattern_craft = Pattern.compile("\\/+[a-z_0-9]+\\/[0-9]+x+[0-9]+");
     private static final String root_craft_download = "https://images.wallpaperscraft.com/image/single/";
     private static final String root_craft = "https://wallpaperscraft.com";
+    private static final String kafka_topic = "image-craft-topic";
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
     @Autowired
     private ImageRepository imageRepository;
     @Autowired
@@ -62,6 +76,24 @@ public class ScrapingService {
         baseResponse.setStatus(Status.builder().message("Get success: " + lstRs.size() + " Failed: " + failList.size()).code("0").build());
         return baseResponse;
     }
+    @Async("taskExecutor")
+    public BaseResponse getBestWallPapersCraftKafka(BestHqRequest bestHqRequest) throws ExecutionException, InterruptedException {
+        List<String> urlList = IntStream.rangeClosed(bestHqRequest.getPageNumber(), bestHqRequest.getPageNumber() + bestHqRequest.getTotal()).mapToObj(x -> bestHqRequest.getBaseUrl() + x).collect(Collectors.toList());
+        ForkJoinPool customThreadPool = new ForkJoinPool(4);
+
+        customThreadPool.submit(
+                () -> urlList.parallelStream().forEach(x -> putLinkWallpapersCraft(x)));
+        customThreadPool.shutdown();
+
+
+        log.info("Image Saved");
+        log.info("Saving {} fail...", failList.size());
+        saveAllBackUp(failList);
+
+        BaseResponse baseResponse = new BaseResponse();
+        baseResponse.setStatus(Status.builder().message("Failed: " + failList.size()).code("0").build());
+        return baseResponse;
+    }
 
     private List<TblImageInfo> parallelScan(List<String> urlList) throws ExecutionException, InterruptedException {
         ForkJoinPool customThreadPool = new ForkJoinPool(4);
@@ -74,7 +106,7 @@ public class ScrapingService {
     private List<TblImageInfo> getMetaDataBestWallHq(String url) {
         List<TblImageInfo> tblImageInfoList = null;
         try {
-            Document doc = Jsoup.connect(url).userAgent("Opera").timeout(30 * 1000).get();
+            Document doc = Jsoup.connect(url).userAgent("Opera").get();
 
             Elements listThumb = doc.getElementsByClass("wallpaper-thumb");
 
@@ -111,6 +143,65 @@ public class ScrapingService {
         return tblImageInfoList;
     }
 
+    private void putLinkWallpapersCraft(String url) {
+        try {
+            Document doc = Jsoup.connect(url).userAgent("Opera").get();
+
+            Elements listThumb = doc.getElementsByClass("wallpapers__link");
+
+            listThumb.stream().forEach(x -> {
+
+                sendMessage(root_craft + x.attr("href"));
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+            });
+        } catch (Exception e) {
+            log.error("Fail to get HTML Document: {}", url);
+        }
+    }
+
+    public void sendMessage(String message) {
+
+        ListenableFuture<SendResult<String, String>> future =
+                kafkaTemplate.send(kafka_topic, message);
+
+        future.addCallback(new ListenableFutureCallback<SendResult<String, String>>() {
+
+            @Override
+            public void onSuccess(SendResult<String, String> result) {
+                log.info("Sent message=[" + message +
+                        "] with offset=[" + result.getRecordMetadata().offset() + "]");
+            }
+
+            @Override
+            public void onFailure(Throwable ex) {
+                log.error("Unable to send message=["
+                        + message + "] due to : " + ex.getMessage());
+            }
+        });
+    }
+
+    @KafkaListener(topics = kafka_topic, groupId = "npt")
+    public void listenGroupFoo(String message) {
+        log.info("Received Message in group npt: " + message);
+        try {
+            TblImageInfo tblImageInfo = getMetaDataCraft(message);
+            if (tblImageInfo.getName() != null)
+                imageRepository.save(tblImageInfo);
+
+        } catch (ConstraintViolationException e2) {
+            log.error("An error has occurred: {}", e2.getMessage());
+        } catch (Exception e) {
+            backupRepository.save(new TblBackup(message));
+            log.error("An error has occurred: {}", e.getMessage());
+        } finally {
+        }
+    }
+
     private TblImageInfo getMetaDataCraft(String url) {
         TblImageInfo tblImageInfo = null;
         try {
@@ -128,6 +219,8 @@ public class ScrapingService {
                     .type("wallpaperscraft.com")
                     .build();
             log.info("Scraped page: {}", url);
+        } catch (ConstraintViolationException e2) {
+            log.error("An error has occurred: {}", e2.getMessage());
         } catch (Exception e) {
             failList.add(new TblBackup(url));
             log.error("An error has occurred: {}", e.getMessage());
@@ -135,15 +228,15 @@ public class ScrapingService {
         return tblImageInfo;
     }
 
-    public void retryFail() {
-        List<TblBackup> backupList = backupRepository.findAll();
+    public void retryFail(int limit) {
+        List<TblBackup> backupList = backupRepository.getAllListBackup(limit);
         List<TblImageInfo> imageInfoList = backupList.stream().map(x -> {
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            backupRepository.delete(x);
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    backupRepository.delete(x);
                     return getMetaDataCraft(x.getValue());
                 }
         ).filter(Objects::nonNull).collect(Collectors.toList());
@@ -155,7 +248,7 @@ public class ScrapingService {
         log.info("Successfully");
     }
 
-    private void saveAllImage(List<TblImageInfo> lst)  {
+    private void saveAllImage(List<TblImageInfo> lst) {
         ForkJoinPool customThreadPool = new ForkJoinPool(4);
         customThreadPool.submit(
                 () -> lst.parallelStream().forEach(x -> {
@@ -181,6 +274,5 @@ public class ScrapingService {
                 }));
         customThreadPool.shutdown();
     }
-
 
 }

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.concurrent.ExecutionException;
 
@@ -40,7 +41,7 @@ public class ScrapingWS extends BaseWS {
     public ResponseEntity<BaseResponse> getFromWallPapersCraft(@RequestBody BestHqRequest bestHqRequest) {
         BaseResponse baseResponse = new BaseResponse();
         try {
-            baseResponse = scrapingService.getBestWallPapersCraft(bestHqRequest);
+            baseResponse = scrapingService.getBestWallPapersCraftKafka(bestHqRequest);
         } catch (ExecutionException e) {
             e.printStackTrace();
         } catch (InterruptedException e) {
@@ -50,9 +51,9 @@ public class ScrapingWS extends BaseWS {
     }
 
     @RequestMapping(value = "/retry", method = {RequestMethod.GET},  produces = {MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<BaseResponse> retry() {
+    public ResponseEntity<BaseResponse> retry(@RequestParam(required = false, defaultValue = "50") int limit) {
 
-        scrapingService.retryFail();
+        scrapingService.retryFail(limit);
         BaseResponse baseResponse = new BaseResponse();
         baseResponse.setStatus(Status.builder().message("Retry successfully").code("0").build());
         return ResponseEntity.ok(baseResponse);
